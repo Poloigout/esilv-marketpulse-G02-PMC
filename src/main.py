@@ -1,18 +1,20 @@
 from pathlib import Path
 import csv
 import json
+import yfinance as yf
 from analytics import (
     align_series,
     calculate_base_100,
     calculate_period_return,
     calculate_relative_performance,
 )
-
+from providers.yahoo_provider import YAHOO_SYMBOLS, fetch_yahoo_prices
 
 DATA_DIR = Path("data/sample")
 
 LOOKBACK_LABEL = "1_month"
 INTERVAL_LABEL = "Daily"
+
 
 def get_first_date(prices):
     return prices[0]["date"]
@@ -20,6 +22,7 @@ def get_first_date(prices):
 
 def get_last_date(prices):
     return prices[-1]["date"]
+
 
 def load_instruments():
     with open(DATA_DIR / "instruments.json", encoding="utf-8") as file:
@@ -77,6 +80,7 @@ def display_market_summary(asset, prices, show_currency=True):
         print("First close :", first_close)
         print("Last close :", last_close)
 
+
 def normalize_price_row(row):
     return {
         "date": row["date"],
@@ -88,26 +92,56 @@ def normalize_price_row(row):
         "volume": int(row["volume"]),
     }
 
-def main():
-    instruments = load_instruments()
-    prices = load_prices()
 
-    instrument = instruments["instrument"]
-    benchmark = instruments["benchmark"]
-
-    normalized_prices = [
-        normalize_price_row(row)
-        for row in prices
-    ]
-
-    instrument_prices = filter_prices(
-        normalized_prices,
-        instrument["ticker"],
+def fetch_yahoo_prices(
+    symbol,
+    canonical_ticker,
+    period="1mo",
+    interval="1d",
+):
+    history = yf.Ticker(symbol).history(
+        period=period,
+        interval=interval,
+        auto_adjust=False,
     )
 
-    benchmark_prices = filter_prices(
-        normalized_prices,
-        benchmark["ticker"],
+    if history.empty:
+        raise ValueError(
+            "No Yahoo Finance data returned for " + symbol
+        )
+
+    rows = []
+
+    for timestamp, row in history.iterrows():
+        rows.append({
+            "date": timestamp.strftime("%Y-%m-%d"),
+            "ticker": canonical_ticker,
+            "open": float(row["Open"]),
+            "high": float(row["High"]),
+            "low": float(row["Low"]),
+            "close": float(row["Close"]),
+            "volume": int(row["Volume"]),
+        })
+
+    return rows
+
+
+def main():
+    instrument_ticker = "AAPL"
+    benchmark_ticker = "SP500"
+
+    instrument_prices = fetch_yahoo_prices(
+        symbol=YAHOO_SYMBOLS[instrument_ticker],
+        canonical_ticker=instrument_ticker,
+        period="1mo",
+        interval="1d",
+    )
+
+    benchmark_prices = fetch_yahoo_prices(
+        symbol=YAHOO_SYMBOLS[benchmark_ticker],
+        canonical_ticker=benchmark_ticker,
+        period="1mo",
+        interval="1d",
     )
 
     aligned_instrument, aligned_benchmark = align_series(
@@ -115,25 +149,14 @@ def main():
         benchmark_prices,
     )
 
-    instrument_return = calculate_period_return(
-        aligned_instrument,
-    )
-    benchmark_return = calculate_period_return(
-        aligned_benchmark,
-    )
+    instrument_return = calculate_period_return(aligned_instrument)
+    benchmark_return = calculate_period_return(aligned_benchmark)
     relative_performance = calculate_relative_performance(
         instrument_return,
         benchmark_return,
     )
-    instrument_base_100 = calculate_base_100(
-        aligned_instrument,
-    )
-    benchmark_base_100 = calculate_base_100(
-        aligned_benchmark,
-    )
-
-    instrument_ticker = instrument["ticker"]
-    benchmark_ticker = benchmark["ticker"]
+    instrument_base_100 = calculate_base_100(aligned_instrument)
+    benchmark_base_100 = calculate_base_100(aligned_benchmark)
 
     rel_perf_rounded = round(relative_performance, 2)
     if rel_perf_rounded > 0:
@@ -143,30 +166,24 @@ def main():
 
     print("=== MarketPulse ===")
     print()
-
+    print("Provider")
+    print("Yahoo Finance via yfinance")
+    print()
     print("Market configuration")
-    print("Period   :", LOOKBACK_LABEL)
-    print("Interval :", INTERVAL_LABEL)
+    print("Instrument :", instrument_ticker, "- Apple Inc.")
+    print("Benchmark  : S&P 500")
+    print("Period     :", LOOKBACK_LABEL)
+    print("Interval   :", INTERVAL_LABEL)
     print()
-
-    print("Instrument")
-    print(instrument_ticker, "-", instrument["name"])
-    print("Period return :", str(round(instrument_return, 2)) + "%")
+    print("Instrument return :", str(round(instrument_return, 2)) + "%")
+    print("Benchmark return  :", str(round(benchmark_return, 2)) + "%")
     print()
-
-    print("Benchmark")
-    print(benchmark_ticker, "-", benchmark["name"])
-    print("Period return :", str(round(benchmark_return, 2)) + "%")
-    print()
-
     print("Relative performance")
     print(instrument_ticker, "vs", benchmark_ticker, ":", rel_perf_str, "percentage points")
     print()
-
     print("Base 100")
     print(instrument_ticker, " :", round(instrument_base_100[0]["value"], 2), "->", round(instrument_base_100[-1]["value"], 2))
     print(benchmark_ticker, ":", round(benchmark_base_100[0]["value"], 2), "->", round(benchmark_base_100[-1]["value"], 2))
-
 
 
 if __name__ == "__main__":
