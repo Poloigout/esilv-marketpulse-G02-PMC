@@ -52,6 +52,7 @@ def get_last_close(prices):
 def display_market_summary(asset, prices, show_currency=True):
     ticker = asset["ticker"]
     name = asset["name"]
+    market = asset["market"]
 
     first_close = get_first_close(prices)
     last_close = get_last_close(prices)
@@ -59,6 +60,7 @@ def display_market_summary(asset, prices, show_currency=True):
     print("First date :", get_first_date(prices))
     print("Last date :", get_last_date(prices))
     print(ticker + " - " + name)
+    print("Market :", market)
     print("Observations :", len(prices))
 
     if show_currency:
