@@ -1,6 +1,12 @@
 from pathlib import Path
 import csv
 import json
+from analytics import (
+    align_series,
+    calculate_base_100,
+    calculate_period_return,
+    calculate_relative_performance,
+)
 
 
 DATA_DIR = Path("data/sample")
@@ -71,6 +77,16 @@ def display_market_summary(asset, prices, show_currency=True):
         print("First close :", first_close)
         print("Last close :", last_close)
 
+def normalize_price_row(row):
+    return {
+        "date": row["date"],
+        "ticker": row["ticker"],
+        "open": float(row["open"]),
+        "high": float(row["high"]),
+        "low": float(row["low"]),
+        "close": float(row["close"]),
+        "volume": int(row["volume"]),
+    }
 
 def main():
     instruments = load_instruments()
@@ -79,38 +95,77 @@ def main():
     instrument = instruments["instrument"]
     benchmark = instruments["benchmark"]
 
+    normalized_prices = [
+        normalize_price_row(row)
+        for row in prices
+    ]
+
     instrument_prices = filter_prices(
-        prices,
-        instrument["ticker"]
+        normalized_prices,
+        instrument["ticker"],
     )
 
     benchmark_prices = filter_prices(
-        prices,
-        benchmark["ticker"]
+        normalized_prices,
+        benchmark["ticker"],
     )
+
+    aligned_instrument, aligned_benchmark = align_series(
+        instrument_prices,
+        benchmark_prices,
+    )
+
+    instrument_return = calculate_period_return(
+        aligned_instrument,
+    )
+    benchmark_return = calculate_period_return(
+        aligned_benchmark,
+    )
+    relative_performance = calculate_relative_performance(
+        instrument_return,
+        benchmark_return,
+    )
+    instrument_base_100 = calculate_base_100(
+        aligned_instrument,
+    )
+    benchmark_base_100 = calculate_base_100(
+        aligned_benchmark,
+    )
+
+    instrument_ticker = instrument["ticker"]
+    benchmark_ticker = benchmark["ticker"]
+
+    rel_perf_rounded = round(relative_performance, 2)
+    if rel_perf_rounded > 0:
+        rel_perf_str = "+" + str(rel_perf_rounded)
+    else:
+        rel_perf_str = str(rel_perf_rounded)
 
     print("=== MarketPulse ===")
     print()
 
     print("Market configuration")
-    print("Period :", LOOKBACK_LABEL)
+    print("Period   :", LOOKBACK_LABEL)
     print("Interval :", INTERVAL_LABEL)
     print()
 
     print("Instrument")
-    display_market_summary(
-        instrument,
-        instrument_prices,
-        True
-    )
+    print(instrument_ticker, "-", instrument["name"])
+    print("Period return :", str(round(instrument_return, 2)) + "%")
     print()
 
     print("Benchmark")
-    display_market_summary(
-        benchmark,
-        benchmark_prices,
-        False
-    )
+    print(benchmark_ticker, "-", benchmark["name"])
+    print("Period return :", str(round(benchmark_return, 2)) + "%")
+    print()
+
+    print("Relative performance")
+    print(instrument_ticker, "vs", benchmark_ticker, ":", rel_perf_str, "percentage points")
+    print()
+
+    print("Base 100")
+    print(instrument_ticker, " :", round(instrument_base_100[0]["value"], 2), "->", round(instrument_base_100[-1]["value"], 2))
+    print(benchmark_ticker, ":", round(benchmark_base_100[0]["value"], 2), "->", round(benchmark_base_100[-1]["value"], 2))
 
 
 

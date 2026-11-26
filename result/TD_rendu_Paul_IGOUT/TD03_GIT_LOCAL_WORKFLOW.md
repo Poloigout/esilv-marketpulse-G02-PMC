@@ -292,8 +292,7 @@ Use `git diff` to inspect unstaged changes.
 Possible short-status markers may include:
 
 ```text
-M
-??
+
 ```
 
 You do not need to memorize every Git status code today.

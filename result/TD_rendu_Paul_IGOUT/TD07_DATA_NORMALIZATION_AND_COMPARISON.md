@@ -295,6 +295,7 @@ Because `analytics.py` should receive comparison-ready canonical rows.
 
 Later providers will be responsible for producing that same row shape.
 
+
 ## Validate types
 
 Temporarily inspect:
@@ -310,6 +311,7 @@ Expected:
 float
 int
 ```
+![alt text](image-19.png)
 
 Remove temporary debug output afterward.
 
@@ -697,6 +699,8 @@ TD07 prepares the comparison behaviour later visible in:
 ```text
 04_instrument_benchmark.png
 ```
+![alt text](image-18.png)
+
 
 The canonical evidence contract is:
 
