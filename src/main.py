@@ -8,7 +8,15 @@ from analytics import (
     calculate_period_return,
     calculate_relative_performance,
 )
+from analytics import align_series
+
+
 from providers.yahoo_provider import YAHOO_SYMBOLS, fetch_yahoo_prices
+from providers.bloomberg_provider import (
+    BLOOMBERG_IDENTIFIERS,
+    fetch_raw_bloomberg_history,
+    normalize_bloomberg_history,
+)
 
 DATA_DIR = Path("data/sample")
 
@@ -126,24 +134,28 @@ def fetch_yahoo_prices(
         })
 
     return rows
-
-
-def main():
+def build_market_snapshot():
     instrument_ticker = "AAPL"
     benchmark_ticker = "SP500"
 
-    instrument_prices = fetch_yahoo_prices(
-        symbol=YAHOO_SYMBOLS[instrument_ticker],
-        canonical_ticker=instrument_ticker,
-        period="1mo",
-        interval="1d",
+    raw_instrument = fetch_raw_bloomberg_history(
+        BLOOMBERG_IDENTIFIERS[instrument_ticker],
+        None,
+        None,
+    )
+    raw_benchmark = fetch_raw_bloomberg_history(
+        BLOOMBERG_IDENTIFIERS[benchmark_ticker],
+        None,
+        None,
     )
 
-    benchmark_prices = fetch_yahoo_prices(
-        symbol=YAHOO_SYMBOLS[benchmark_ticker],
-        canonical_ticker=benchmark_ticker,
-        period="1mo",
-        interval="1d",
+    instrument_prices = normalize_bloomberg_history(
+        raw_instrument,
+        instrument_ticker,
+    )
+    benchmark_prices = normalize_bloomberg_history(
+        raw_benchmark,
+        benchmark_ticker,
     )
 
     aligned_instrument, aligned_benchmark = align_series(
@@ -160,32 +172,71 @@ def main():
     instrument_base_100 = calculate_base_100(aligned_instrument)
     benchmark_base_100 = calculate_base_100(aligned_benchmark)
 
-    rel_perf_rounded = round(relative_performance, 2)
-    if rel_perf_rounded > 0:
-        rel_perf_str = "+" + str(rel_perf_rounded)
-    else:
-        rel_perf_str = str(rel_perf_rounded)
+    return {
+        "provider": "Bloomberg stage - APPROVED_SAMPLE",
+        "lookback": LOOKBACK_LABEL,
+        "interval": INTERVAL_LABEL,
+        "instrument": {
+            "ticker": instrument_ticker,
+            "name": "Apple Inc.",
+        },
+        "benchmark": {
+            "ticker": benchmark_ticker,
+            "name": "S&P 500",
+        },
+        "instrument_return": instrument_return,
+        "benchmark_return": benchmark_return,
+        "relative_performance": relative_performance,
+        "instrument_base_100": instrument_base_100,
+        "benchmark_base_100": benchmark_base_100,
+    }
+
+
+def main():
+    snapshot = build_market_snapshot()
 
     print("=== MarketPulse ===")
     print()
     print("Provider")
-    print("Yahoo Finance via yfinance")
+    print("Bloomberg stage")
+    print()
+    print("Access mode")
+    print("APPROVED_SAMPLE")
     print()
     print("Market configuration")
-    print("Instrument :", instrument_ticker, "- Apple Inc.")
-    print("Benchmark  : S&P 500")
-    print("Period     :", LOOKBACK_LABEL)
-    print("Interval   :", INTERVAL_LABEL)
+    print("Instrument :", snapshot["instrument"]["ticker"], "-", snapshot["instrument"]["name"])
+    print("Benchmark  :", snapshot["benchmark"]["name"])
+    print("Period     :", snapshot["lookback"])
+    print("Interval   :", snapshot["interval"])
     print()
-    print("Instrument return :", str(round(instrument_return, 2)) + "%")
-    print("Benchmark return  :", str(round(benchmark_return, 2)) + "%")
+    print("Instrument return :", str(round(snapshot["instrument_return"], 2)) + "%")
+    print("Benchmark return  :", str(round(snapshot["benchmark_return"], 2)) + "%")
     print()
     print("Relative performance")
-    print(instrument_ticker, "vs", benchmark_ticker, ":", rel_perf_str, "percentage points")
+    print(
+        snapshot["instrument"]["ticker"],
+        "vs",
+        snapshot["benchmark"]["ticker"],
+        ":",
+        round(snapshot["relative_performance"], 2),
+        "percentage points",
+    )
     print()
     print("Base 100")
-    print(instrument_ticker, " :", round(instrument_base_100[0]["value"], 2), "->", round(instrument_base_100[-1]["value"], 2))
-    print(benchmark_ticker, ":", round(benchmark_base_100[0]["value"], 2), "->", round(benchmark_base_100[-1]["value"], 2))
+    print(
+        snapshot["instrument"]["ticker"],
+        " :",
+        round(snapshot["instrument_base_100"][0]["value"], 2),
+        "->",
+        round(snapshot["instrument_base_100"][-1]["value"], 2),
+    )
+    print(
+        snapshot["benchmark"]["ticker"],
+        ":",
+        round(snapshot["benchmark_base_100"][0]["value"], 2),
+        "->",
+        round(snapshot["benchmark_base_100"][-1]["value"], 2),
+    )
 
 
 if __name__ == "__main__":
